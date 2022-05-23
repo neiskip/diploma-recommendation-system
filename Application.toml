@@ -1,0 +1,11 @@
+data_definition =""
+
+[database]
+driver = "mysql"
+host ="localhost"
+name = "payagrdb"
+login = "neiskip"
+password = "1703333"
+
+rating_view = "transaction"
+product_data_view ="orders"
