@@ -14,7 +14,7 @@ async fn main() {
 
     let app = App::new();
 
-    let mut cli = CLI::default()
+    CLI::default()
         .get_arguments()
         .run(Arc::new(Mutex::new(app.await)));
 

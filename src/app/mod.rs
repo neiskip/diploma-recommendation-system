@@ -4,7 +4,6 @@ use sqlx::any::{AnyColumn, AnyConnection, AnyKind, AnyRow};
 use serde::Deserialize;
 use sqlx::Connection;
 
-#[derive(Default)]
 pub struct App{
     pub(crate) config: Box<Config>,
     pub(crate) handler: Processor
@@ -39,5 +38,9 @@ impl App{
             + &"@".to_string() + &config.database.host.clone()
             + &"/".to_string() + &config.database.name.clone()).as_str()).await.unwrap();
         App{ config: Box::new(config), handler: Processor::new(db) }
+    }
+    pub fn get_config() -> Config {
+        toml::from_str::<Config>(std::fs::read_to_string("Application.toml")
+        .expect("Unable to read application config file").as_str()).unwrap()
     }
 }

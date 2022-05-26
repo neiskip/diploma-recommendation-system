@@ -2,10 +2,11 @@ use serde::Deserialize;
 
 #[derive(Default, Deserialize)]
 pub struct Request{
-    user_id: usize,
-    product_id: Option<usize>,
-    category_id: Option<usize>,
-    word: Option<String>
+    pub(crate) user_id: usize,
+    pub(crate) product_id: Option<usize>,
+    pub(crate) category_id: Option<usize>,
+    pub(crate) word: Option<String>,
+    pub(crate) method: String
 }
 
 impl Request{

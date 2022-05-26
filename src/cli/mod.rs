@@ -44,15 +44,11 @@ impl CLI{
                 app.lock().unwrap();
             },
             "server" => {
-                let listener: Box<TcpListener> = match std::env::consts::OS {
-                    // "windows" => std::net::TcpListener::bind("127.0.0.1:8046").unwrap(),
-                    // _ => std::os::net::UnixListener::bind("/path/to/the/socket").unwrap()
-                    _ => Box::new(std::net::TcpListener::bind("127.0.0.1:8046").unwrap())
-                };
+                let listener: TcpListener = std::net::TcpListener::bind("127.0.0.1:8046").unwrap();
                 for stream in listener.incoming(){
                     let _app = Arc::clone(&app);
                     thread::spawn(move ||{
-                        _app.lock().unwrap().handler.handle(stream.unwrap());
+                        _app.lock().unwrap().handler.run(stream.unwrap());
                     });
                 }
             },
@@ -60,7 +56,3 @@ impl CLI{
         };
     }
 }
-
-trait Listener{}
-impl Listener for TcpStream{}
-// impl Listener for std::os::net::UnixListener{}
