@@ -1,5 +1,5 @@
 
-#[derive(sqlx::FromRow)]
+#[derive(sqlx::FromRow, Debug)]
 pub struct Product{
     pub(crate) item_id: i32,
     pub(crate) title: String,

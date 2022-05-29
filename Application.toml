@@ -3,9 +3,9 @@ data_definition =""
 [database]
 driver = "mysql"
 host ="localhost"
-name = "payagrdb"
+name = "rust_rs"
 login = "neiskip"
 password = "1703333"
 
-rating_view = "transaction"
-product_data_view ="orders"
+rating_view = "transactions"
+product_data_view ="products"

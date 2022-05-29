@@ -1,6 +1,6 @@
 // use alloc::alloc;
 use std::any::TypeId;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::net::TcpStream;
 pub mod learning;
 mod request;
@@ -19,11 +19,27 @@ impl Processor{
         Processor{ db_connect: db }
     }
     pub async fn run(&mut self, mut stream: TcpStream) -> Result<result::Result, Box<dyn std::error::Error>>{
-        let mut buffer = [0; 1024];
-        stream.read(&mut buffer).unwrap();
-
-        let payload = String::from_utf8_lossy(&buffer[..]);
-        let request: Request = serde_json::from_str(payload.as_ref()).unwrap();
+        let mut buffer = vec![0; 1024];
+        // stream.read(&mut buffer).unwrap();
+        let mut request: Request;
+        stream.read(&mut buffer).and_then(|_|{
+            String::from_utf8(buffer).and_then(|request_str|{
+                let start = request_str.find("{").unwrap_or(0 as usize);
+                let end = request_str.find("}").unwrap_or(0 as usize);
+                match serde_json::from_str(&request_str[start..end]){
+                    Ok(r) => request = r,
+                    Err(_) => {}
+                };
+                Ok(request_str)
+            }).unwrap();
+            Ok(0)
+        });
+        // buffer = buffer.iter().filter(|&i| { *i != 0_u8 }).map(|&i| { i }).collect();
+        // let payload = String::from_utf8(buffer).unwrap();
+        // let start_json_i = payload.find("{").unwrap();
+        // let end_json_i = payload.find("}").unwrap();
+        // println!("{}", &payload[start_json_i..end_json_i+1]);
+        // let request: Request = serde_json::from_str(&payload[start_json_i..end_json_i+1]).unwrap();
         match request.validate() {
             Ok(_) => (),
             Err(e) => return Err(e)
@@ -32,8 +48,13 @@ impl Processor{
             "product_recommend" => { self.product_recommend(&request).await },
             "by_category" => { self.recommend_by_category(&request).await }
             _ => Err(MethodNotFound::new("Method not found!").into())
-        };
-        result
+        }.unwrap();
+        println!("{:#?}", result);
+        let response = serde_json::to_string(&result).unwrap();
+        let output = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}", response.len(), response);
+        stream.write(output.as_bytes());
+        // serde_json::to_writer(stream, &result);
+        Ok(result)
     }
 
     pub async fn product_recommend(&mut self, request: &Request) -> Result<result::Result, Box<dyn std::error::Error>> {
@@ -41,7 +62,9 @@ impl Processor{
         let q_s = r#"SELECT * FROM "#.to_owned() + App::get_config().database.product_data_view.unwrap().as_str() + r#";"#;
         let raw_data: Vec<products::Product> = sqlx::query_as(&q_s).fetch_all(&mut self.db_connect).await?;
         let collection = convert_to_series(&raw_data);
+        println!("{:#?}\n{:#?}", raw_data, collection);
         let df = polars::prelude::DataFrame::new(vec![collection.0, collection.1, collection.2, collection.3]).unwrap();
+        println!("{:#?}", df);
         Ok(result::Result{ error: None, result: None })
     }
     pub async fn recommend_by_category(&mut self, request: &Request) -> Result<result::Result, Box<dyn std::error::Error>> {
