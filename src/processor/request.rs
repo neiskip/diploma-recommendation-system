@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-#[derive(Default, Deserialize)]
+#[derive(Default, Deserialize, Clone)]
 pub struct Request{
     pub(crate) user_id: usize,
     pub(crate) product_id: Option<usize>,
