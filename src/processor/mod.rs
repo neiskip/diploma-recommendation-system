@@ -1,13 +1,22 @@
 // use alloc::alloc;
-use std::any::TypeId;
-use std::io::{Read, Write};
-use std::net::TcpStream;
+
 pub mod learning;
 mod request;
 pub mod result;
 pub mod products;
-use polars::series::Series;
+
+use std::any::TypeId;
+use std::io::{Read, Write};
+use std::net::TcpStream;
 use serde::Serialize;
+
+use polars::prelude::{DataFrame, PrimitiveChunkedBuilder, Utf8ChunkedBuilder, Int32Type, ChunkedBuilder, Series};
+use polars::prelude::{Result as PolarResult};
+use smartcore::linalg::naive::dense_matrix::DenseMatrix;
+use smartcore::linalg::BaseMatrix;
+use smartcore::metrics::mean_squared_error;
+use smartcore::linear::linear_regression::LinearRegression;
+
 use crate::app::App;
 use crate::processor::request::Request;
 
@@ -61,7 +70,7 @@ impl Processor{
                 result = Some(Err(e.to_string().into())); is_exit = true;
             }
         };
-        if   let Some(Err(e)) = result {
+        if let Some(Err(e)) = result {
             let output = serde_json::to_string(&result::Result{
                 result: None,
                 error: Some(e.to_string())
@@ -116,7 +125,28 @@ impl Processor{
         let raw_data: Vec<products::Product> = sqlx::query_as(&q_s).fetch_all(&mut self.db_connect).await?;
         let collection = convert_to_series(&raw_data);
         println!("{:#?}\n{:#?}", raw_data, collection);
-        let df = polars::prelude::DataFrame::new(vec![collection.0, collection.1, collection.2, collection.3]).unwrap();
+        let df = DataFrame::new(vec![collection.0, collection.1, collection.2, collection.3]).unwrap();
+        let features = df.select(vec![
+            "description"
+            "title",
+            "category_id"
+        ]).unwrap();
+        let target = df.select(["item_id"]).unwrap();
+        let target_array = target.unwrap().to_ndarray::<Int32Type>().unwrap();
+        let mut y: Vec<i32> = Vec::new();
+        for val in target_array.iter(){
+            y.push(*val);
+        }
+        let xmatrix = convert_features_to_matrix(&features.unwrap()).unwrap();
+        use smartcore::model_selection::train_test_split;
+        let (x_train, x_test, y_train, y_test) = train_test_split(&xmatrix, &y, 0.3, true);
+        let linear_regression = LinearRegression::fit(&x_train, &y_train, Default::default()).unwrap();
+        // predictions
+        let preds = linear_regression.predict(&x_test).unwrap();
+        // metrics
+        let mse = mean_squared_error(&y_test, &preds);
+        let cancer_data = smartcore::dataset::breast_cancer::load_dataset();
+        // let (x_train, x_test, y_train, y_test) = train_test_split(DenseMatrix::from_array(df.c));
         println!("{:#?}", df);
         Ok(result::Result{ error: None, result: None })
     }
@@ -149,7 +179,6 @@ impl std::error::Error for MethodNotFound {
 }
 
 pub fn convert_to_series(values: &[products::Product]) -> (Series, Series, Series, Series){
-    use polars::prelude::*;
     let mut item_id_builder = PrimitiveChunkedBuilder::<Int32Type>::new("item_id", values.len());
     let mut title_builder = Utf8ChunkedBuilder::new("title", values.len(), values.len()*5);
     let mut description_builder = Utf8ChunkedBuilder::new("description", values.len(), values.len()*5);
@@ -169,3 +198,43 @@ pub fn convert_to_series(values: &[products::Product]) -> (Series, Series, Serie
     )
 }
 
+
+
+
+pub fn convert_features_to_matrix(in_df: &DataFrame) -> PolarResult<DenseMatrix<i32>>{
+
+    /* function to convert feature dataframe to a DenseMatrix, readable by smartcore*/
+
+    let nrows = in_df.height();
+    let ncols = in_df.width();
+    // convert to array
+    let features_res = in_df.to_ndarray::<Int32Type>().unwrap();
+    // create a zero matrix and populate with features
+    let mut xmatrix: DenseMatrix<i32> = BaseMatrix::zeros(nrows, ncols);
+    // populate the matrix
+    // initialize row and column counters
+    let mut col:  u32 = 0;
+    let mut row:  u32 = 0;
+
+    for val in features_res.iter(){
+
+        // Debug
+        //println!("{},{}", usize::try_from(row).unwrap(), usize::try_from(col).unwrap());
+        // define the row and col in the final matrix as usize
+        let m_row = usize::try_from(row).unwrap();
+        let m_col = usize::try_from(col).unwrap();
+        // NB we are dereferencing the borrow with *val otherwise we would have a &val type, which is
+        // not what set wants
+        xmatrix.set(m_row, m_col, *val);
+        // check what we have to update
+        if (m_col==ncols-1) {
+            row+=1;
+            col = 0;
+        } else{
+            col+=1;
+        }
+    }
+
+    // Ok so we can return DenseMatrix, otherwise we'll have std::result::Result<Densematrix, PolarsError>
+    Ok(xmatrix)
+}
