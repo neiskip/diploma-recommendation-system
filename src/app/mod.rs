@@ -31,12 +31,18 @@ impl App{
                 || config.database.product_data_view.is_none()){
             println!("Data views' name is not set"); std::process::exit(1);
         }
-        let db = AnyConnection::connect((config.database.driver.clone() + &"://".to_string()
-            + &config.database.login.clone().unwrap_or(String::from(""))
-            + &{ if config.database.password.is_none(){ "" } else { ":" } }.to_string()
-            + &config.database.password.clone().unwrap_or(String::from(""))
-            + &"@".to_string() + &config.database.host.clone()
-            + &"/".to_string() + &config.database.name.clone()).as_str()).await.unwrap();
+        let db = sqlx::MySqlConnection::connect((config.database.driver.clone() + &"://".to_string()
+        + &config.database.login.clone().unwrap_or(String::from(""))
+        + &{ if config.database.password.is_none(){ "" } else { ":" } }.to_string()
+        + &config.database.password.clone().unwrap_or(String::from(""))
+        + &"@".to_string() + &config.database.host.clone()
+        + &"/".to_string() + &config.database.name.clone()).as_str()).await.unwrap();
+        // let db = AnyConnection::connect((config.database.driver.clone() + &"://".to_string()
+        //     + &config.database.login.clone().unwrap_or(String::from(""))
+        //     + &{ if config.database.password.is_none(){ "" } else { ":" } }.to_string()
+        //     + &config.database.password.clone().unwrap_or(String::from(""))
+        //     + &"@".to_string() + &config.database.host.clone()
+        //     + &"/".to_string() + &config.database.name.clone()).as_str()).await.unwrap();
         App{ config: Box::new(config), handler: Processor::new(db) }
     }
     pub fn get_config() -> Config {

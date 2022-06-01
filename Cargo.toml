@@ -16,4 +16,5 @@ futures = "0.3.21"
 tokio = {version = "1.18.2", features = ["full"]}
 
 polars = "0.21.1"
+polars-core = {version = "0.21.1", features = ["ndarray"] }
 smartcore = "0.2.1"

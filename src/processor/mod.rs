@@ -10,7 +10,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use serde::Serialize;
 
-use polars::prelude::{DataFrame, PrimitiveChunkedBuilder, Utf8ChunkedBuilder, Int32Type, ChunkedBuilder, Series};
+use polars::prelude::{DataFrame, PrimitiveChunkedBuilder, Utf8ChunkedBuilder, Int32Type, ChunkedBuilder, Series, Float64Type, Int64Type};
 use polars::prelude::{Result as PolarResult};
 use smartcore::linalg::naive::dense_matrix::DenseMatrix;
 use smartcore::linalg::BaseMatrix;
@@ -27,58 +27,60 @@ macro_rules! response_fmt {
 }
 
 pub struct Processor{
-    pub(crate) db_connect: sqlx::any::AnyConnection
+    pub(crate) db_connect: sqlx::MySqlConnection
 }
 
 impl Processor{
-    pub fn new(db: sqlx::any::AnyConnection) -> Self{
+    pub fn new(db: sqlx::MySqlConnection) -> Self{
         Processor{ db_connect: db }
     }
-    pub async fn run(&mut self, mut stream: TcpStream) -> Result<result::Result, Box<dyn std::error::Error>>{
+    pub async fn run(&mut self, mut stream: TcpStream) -> Result<result::Result, (i32, String)>{
         let mut is_exit = false;
         let mut buffer = vec![0; 1024];
         // stream.read(&mut buffer).unwrap();
-        let mut result: Option<Result<result::Result, Box<dyn std::error::Error>>> = None;
-        let mut request: Result<Request, Box<dyn std::error::Error>> = Ok(Request::default());
+        let mut result: Option<Result<result::Result, (i32, String)>> = None;
+        let mut request: Result<Request, (i32, String)> = Ok(Request::default());
         match stream.read(&mut buffer).and_then(|i|{
             match String::from_utf8(buffer){
                 Ok(request_str) => {
                     let start = request_str.find("{").unwrap_or(0 as usize);
                     let end = request_str.find("}").unwrap_or(0 as usize);
-                    request = match serde_json::from_str::<Request>(&request_str[start..end]){
+                    println!("{}", request_str);
+                    println!("{}", &request_str[start..end+1]);
+                    request = match serde_json::from_str::<Request>(&request_str[start..end+1]){
                         Ok(ref r) => Ok(r.clone()),
-                        Err(e) => Err(e.into())
+                        Err(e) => Err((-1, e.to_string()))
                     };
                 },
                 Err(e) => {
-                    request = Err(e.clone().into());
+                    request = Err((-2, e.to_string()));
                 }
             };
             Ok(i)
         }){
             Ok(_) => {},
-            Err(e) => { request = Err(Box::new(e)); }
+            Err(e) => { request = Err((-3, e.to_string())); }
         };
         match request{
             Ok(ref r) => {
                 match r.validate() {
                     Ok(_) => {},
-                    Err(e) => { result = Some(Err(e)); is_exit = true; }
+                    Err(e) => { result = Some(Err((-4, e.to_string()))); is_exit = true; }
                 };
             }
             Err(ref e) => {
-                result = Some(Err(e.to_string().into())); is_exit = true;
+                result = Some(Err(e.clone())); is_exit = true;
             }
         };
         if let Some(Err(e)) = result {
             let output = serde_json::to_string(&result::Result{
                 result: None,
-                error: Some(e.to_string())
-            }).unwrap_or(format!("{{\"error\": \"{}\", \"result\": null }}", e.to_string()));
+                error: Some(e.1.clone())
+            }).unwrap_or(format!("{{\"error\": \"{}\", \"result\": null }}", e.1));
             let output = format!(response_fmt!(), "400 Bad Request",output.len(), output);
             match stream.write(output.as_bytes()){
                 Ok(_) => return Err(e),
-                Err(e2) => return Err(e2.into())
+                Err(e2) => return Err((-4, e2.to_string()))
             };
         };
         let request = request.unwrap();
@@ -99,16 +101,16 @@ impl Processor{
                 Err(ref e) => {
                     let output = serde_json::to_string(&result::Result{
                         result: None,
-                        error: Some(e.to_string())
-                    }).unwrap_or(format!("{{\"error\": \"{}\", \"result\": null }}", e.to_string()));
+                        error: Some(e.1.clone())
+                    }).unwrap_or(format!("{{\"error\": \"{}\", \"result\": null }}", e.1));
                     let output = format!(response_fmt!(), "400 Bad Request",output.len(), output);
                     match stream.write(output.as_bytes()){
-                        Ok(_) => return Err(e.to_string().into()),
-                        Err(e2) => return Err(e2.into())
+                        Ok(_) => return Err(e.clone()),
+                        Err(e2) => return Err((-5, e2.to_string()))
                     };
                 }
             }
-        }
+        } 
         let result = result.unwrap();
         let response = serde_json::to_string(&result.as_ref().unwrap()).unwrap_or(
             format!("{{\"error\": \"{}\", \"result\": null }}", "Could not convert to JSON")
@@ -119,38 +121,44 @@ impl Processor{
         result
     }
 
-    pub async fn product_recommend(&mut self, request: &Request) -> Result<result::Result, Box<dyn std::error::Error>> {
+    pub async fn product_recommend(&mut self, request: &Request) -> Result<result::Result, (i32, String)> {
         
-        let q_s = r#"SELECT * FROM "#.to_owned() + App::get_config().database.product_data_view.unwrap().as_str() + r#";"#;
-        let raw_data: Vec<products::Product> = sqlx::query_as(&q_s).fetch_all(&mut self.db_connect).await?;
+        let q_s = r#"SELECT item_id, LOWER(title) as title, LOWER(description) as description, category_id FROM "#.to_owned() + App::get_config().database.product_data_view.unwrap().as_str() + r#";"#;
+        println!("{}", q_s);
+        // let raw_data: Vec<products::Product> = sqlx::query_as!(products::Product, "SELECT `item_id`, `title`, `description`, `category_id` FROM `products`;")
+        //                 .fetch_all(&mut self.db_connect).await.unwrap();
+        let raw_data:  Vec<products::Product> = match sqlx::query_as(&q_s).fetch_all(&mut self.db_connect).await{
+            Ok(r) => r,
+            Err(e) => { println!("{:#?}", e); vec![] }
+        };
         let collection = convert_to_series(&raw_data);
         println!("{:#?}\n{:#?}", raw_data, collection);
         let df = DataFrame::new(vec![collection.0, collection.1, collection.2, collection.3]).unwrap();
         let features = df.select(vec![
-            "description"
+            "description",
             "title",
             "category_id"
         ]).unwrap();
         let target = df.select(["item_id"]).unwrap();
-        let target_array = target.unwrap().to_ndarray::<Int32Type>().unwrap();
-        let mut y: Vec<i32> = Vec::new();
+        let target_array = target.to_ndarray::<Float64Type>().unwrap();
+        let mut y: Vec<f64> = Vec::new();
         for val in target_array.iter(){
             y.push(*val);
         }
-        let xmatrix = convert_features_to_matrix(&features.unwrap()).unwrap();
+        let xmatrix = convert_features_to_matrix(&features).unwrap();
         use smartcore::model_selection::train_test_split;
         let (x_train, x_test, y_train, y_test) = train_test_split(&xmatrix, &y, 0.3, true);
         let linear_regression = LinearRegression::fit(&x_train, &y_train, Default::default()).unwrap();
         // predictions
         let preds = linear_regression.predict(&x_test).unwrap();
+        println!("{:#?}", preds);
         // metrics
         let mse = mean_squared_error(&y_test, &preds);
-        let cancer_data = smartcore::dataset::breast_cancer::load_dataset();
         // let (x_train, x_test, y_train, y_test) = train_test_split(DenseMatrix::from_array(df.c));
-        println!("{:#?}", df);
+        println!("{:#?}\n{:#?}\n{:#?}", df, target_array, xmatrix);
         Ok(result::Result{ error: None, result: None })
     }
-    pub async fn recommend_by_category(&mut self, request: &Request) -> Result<result::Result, Box<dyn std::error::Error>> {
+    pub async fn recommend_by_category(&mut self, request: &Request) -> Result<result::Result, (i32, String)> {
         
         Ok(result::Result{ error: None, result: None })
 
@@ -179,16 +187,16 @@ impl std::error::Error for MethodNotFound {
 }
 
 pub fn convert_to_series(values: &[products::Product]) -> (Series, Series, Series, Series){
-    let mut item_id_builder = PrimitiveChunkedBuilder::<Int32Type>::new("item_id", values.len());
+    let mut item_id_builder = PrimitiveChunkedBuilder::<Int64Type>::new("item_id", values.len());
     let mut title_builder = Utf8ChunkedBuilder::new("title", values.len(), values.len()*5);
     let mut description_builder = Utf8ChunkedBuilder::new("description", values.len(), values.len()*5);
     let mut category_id_builder = PrimitiveChunkedBuilder::<Int32Type>::new("category_id", values.len());
 
     values.iter().for_each(|v|{
-        item_id_builder.append_value(v.item_id);
-        title_builder.append_value(&v.title);
+        item_id_builder.append_value(v.item_id as i64);
+        title_builder.append_value(v.title.clone());
         description_builder.append_option::<String>(v.description.clone());
-        category_id_builder.append_option(v.category_id);
+        category_id_builder.append_option(Option::Some(v.category_id.unwrap() as i32));
     });
     (
         item_id_builder.finish().into(),
@@ -201,16 +209,16 @@ pub fn convert_to_series(values: &[products::Product]) -> (Series, Series, Serie
 
 
 
-pub fn convert_features_to_matrix(in_df: &DataFrame) -> PolarResult<DenseMatrix<i32>>{
+pub fn convert_features_to_matrix(in_df: &DataFrame) -> PolarResult<DenseMatrix<f64>>{
 
     /* function to convert feature dataframe to a DenseMatrix, readable by smartcore*/
 
     let nrows = in_df.height();
     let ncols = in_df.width();
     // convert to array
-    let features_res = in_df.to_ndarray::<Int32Type>().unwrap();
+    let features_res = in_df.to_ndarray::<Float64Type>().unwrap();
     // create a zero matrix and populate with features
-    let mut xmatrix: DenseMatrix<i32> = BaseMatrix::zeros(nrows, ncols);
+    let mut xmatrix: DenseMatrix<f64> = BaseMatrix::zeros(nrows, ncols);
     // populate the matrix
     // initialize row and column counters
     let mut col:  u32 = 0;
