@@ -10,47 +10,27 @@ pub struct Request{
 }
 
 impl Request{
-    pub fn validate(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn validate(&self) -> Result<(), (i32, String)> {
         match self.user_id{
-            0 => return Err(ValidationError::new("Not allowed user id").into()),
+            0 => return Err((-51, "Not allowed user id".to_string())),
             _ => ()
         };
         match self.product_id{
-            Some(0) => return Err(ValidationError::new("Not allowed product id").into()),
+            Some(0) => return Err((-52, "Not allowed product id".to_string())),
             _ => ()
         };
         match self.category_id{
-            Some(0) => return Err(ValidationError::new("Not allowed category id").into()),
+            Some(0) => return Err((-53, "Not allowed category id".to_string())),
             _ => ()
         };
         match &self.word{
             Some(s) =>{
                 if s.is_empty() {
-                    return Err(ValidationError::new("Empty search word").into());
+                    return Err((-54, "Empty search word".to_string()));
                 }
             },
             _ => ()
         };
         Ok(())
-    }
-}
-
-#[derive(Debug)]
-struct ValidationError{ message: String }
-
-impl ValidationError{
-    fn new(msg: &str) -> ValidationError {
-        ValidationError { message: msg.to_string() }
-    }
-}
-
-impl std::fmt::Display for ValidationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.message)
-    }
-}
-impl std::error::Error for ValidationError {
-    fn description(&self) -> &str {
-        &self.message
     }
 }
