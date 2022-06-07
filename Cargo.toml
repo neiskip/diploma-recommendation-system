@@ -20,3 +20,5 @@ polars-core = {version = "0.21.1", features = ["ndarray" ,"rows"] }
 smartcore = "0.2.1"
 
 fuzzy-matcher = "0.3.7"
+
+discorec = "0.1.1"

@@ -10,9 +10,3 @@ impl Learner for Processor {
         vec![]
     }
 }
-
-impl Processor{
-    pub fn get_data(db: sqlx::any::AnyConnection)-> Vec<usize>{
-        vec![]
-    }
-}

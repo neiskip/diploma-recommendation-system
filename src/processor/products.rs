@@ -4,5 +4,6 @@ pub struct Product{
     pub(crate) item_id: u64,
     pub(crate) title: String,
     pub(crate) description: Option<String>,
-    pub(crate) category_id: Option<u32>
+    pub(crate) user_id: u64,
+    pub(crate) rating: f32
 }

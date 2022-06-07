@@ -45,6 +45,7 @@ impl CLI{
             },
             "server" => {
                 let listener: TcpListener = std::net::TcpListener::bind("127.0.0.1:8046").unwrap();
+
                 for stream in listener.incoming(){
                     let _app = Arc::clone(&app);
                     thread::spawn(move ||{
