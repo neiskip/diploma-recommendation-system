@@ -4,6 +4,7 @@ pub mod learning;
 mod request;
 pub mod result;
 pub mod products;
+pub mod recommender;
 
 use std::io::{Read, Write};
 use std::net::TcpStream;
