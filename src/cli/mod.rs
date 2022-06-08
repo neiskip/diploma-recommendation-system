@@ -33,18 +33,28 @@ impl CLI{
         self
     }
     pub fn run(&self, app: Arc<Mutex<App>>){
-        match self.args.get(&'c').unwrap_or(&String::from("")).as_str() {
-            "search" => {
-
-            },
-            _ => {}
-        };
         match self.args.get(&'r').unwrap_or(&String::from("")).as_str() {
-            "output" => {
-                app.lock().unwrap();
+            "test" => {
+                app.lock().unwrap().handler.test().unwrap();
+            },
+            "terminal" => {
+                let mut _app = app.lock().unwrap();
+                let result = match self.args.get(&'m').unwrap_or(&String::from("")).as_str() {
+                    "by_product" => _app.handler.product_recommend(&crate::processor::request::Request{
+                        user_id: None,
+                        product_id: match self.args.get(&'i').expect("Option `i` is not set").trim().parse(){
+                            Ok(id) if id > 0 => Some(id),
+                            Err(_) => panic!("Not numeric ID"),
+                            Ok(id) => panic!("Incorrect ID")
+                        },
+                        method: "by_product".to_string(),
+                        limit: None
+                    }),
+                    _ => panic!("Method not found!")
+                };
             },
             "server" => {
-                let listener: TcpListener = std::net::TcpListener::bind("127.0.0.1:8046").unwrap();
+                let listener: TcpListener = std::net::TcpListener::bind("127.0.0.1:8047").unwrap();
 
                 for stream in listener.incoming(){
                     let _app = Arc::clone(&app);

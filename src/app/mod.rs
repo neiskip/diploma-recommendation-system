@@ -43,7 +43,7 @@ impl App{
         //     + &config.database.password.clone().unwrap_or(String::from(""))
         //     + &"@".to_string() + &config.database.host.clone()
         //     + &"/".to_string() + &config.database.name.clone()).as_str()).await.unwrap();
-        App{ config: Box::new(config), handler: Processor::new(db) }
+        App{ config: Box::new(config), handler: Processor::new(db).await }
     }
     pub fn get_config() -> Config {
         toml::from_str::<Config>(std::fs::read_to_string("Application.toml")

@@ -1,7 +1,7 @@
 // use alloc::alloc;
 
 pub mod learning;
-mod request;
+pub mod request;
 pub mod result;
 pub mod products;
 pub mod recommender;
@@ -24,29 +24,29 @@ macro_rules! response_fmt {
 }
 
 pub struct Processor{
-    pub(crate) db_connect: sqlx::MySqlConnection,
     pub(crate) data: Vec<products::Product>,
     pub(crate) recommender: recommender::Recommender
 }
 
 impl Processor{
-    pub fn new(mut db: sqlx::MySqlConnection) -> Self{
-        let data = futures::executor::block_on(Processor::get_data(&mut db)).unwrap();
-        Processor{ db_connect: db, data: data, recommender: recommender::Recommender::new() }
+    pub async fn new(mut db: sqlx::MySqlConnection) -> Self{
+        let data = Processor::get_data(&mut db).await.unwrap();
+        println!("{:#?}", data);
+        Processor{ data: data, recommender: recommender::Recommender::new() }
     }
     pub async fn get_data(db: &mut sqlx::MySqlConnection) -> Result<Vec<products::Product>, (i32, String)> {
         let product_view = App::get_config().database.product_data_view.unwrap_or("products".to_string());
-        let rating_view = App::get_config().database.product_data_view.unwrap_or("user_ratings".to_string());
+        let rating_view = App::get_config().database.rating_view.unwrap_or("user_ratings".to_string());
         let q_s =
-            format!("SELECT p.item_id, LOWER(p.title) as title, LOWER(p.description) as description, p.category_id FROM ")
+            format!("SELECT r.user_id, p.item_id, CAST(r.rating as FLOAT) as rating FROM ")
                 + rating_view.as_str() + " as r JOIN " + product_view.as_str() + " p ON r.item_id = p.item_id";
+        println!("{}", q_s);
         match sqlx::query_as(&q_s).fetch_all(db).await{
             Ok(r) => Ok(r),
             Err(e) => Err((-50, e.to_string()))
         }
     }
     pub async fn run(&mut self, mut stream: TcpStream) -> Result<result::Result, (i32, String)>{
-        let mut is_exit = false;
         let mut buffer = vec![0; 1024];
         // stream.read(&mut buffer).unwrap();
         let mut result: Result<result::Result, (i32, String)>;
@@ -81,13 +81,14 @@ impl Processor{
         }
         let request = request.unwrap();
         match request.method.as_str() {
-            "by_user" => { self.product_recommend(&request).await },
-            "by_product" => { self.user_recommend(&request).await }
+            "by_user" => { self.user_recommend(&request) },
+            "by_product" => { self.product_recommend(&request) }
             _ => Err((-5, "Method not found".to_string()))
         }.and_then(|result| {
             let response = serde_json::to_string(&result).unwrap_or(
                 format!("{{\"error\": \"{}\", \"result\": null }}", "Could not convert to JSON")
             );
+            println!("{}", response);
             let output = format!(response_fmt!(),"200 OK", response.len(), response);
             stream.write(output.as_bytes()).map_or_else(|e|{ Err((-5, e.to_string())) }, |_| Ok(result))
         }).map_err(|e|{
@@ -103,11 +104,12 @@ impl Processor{
         })
     }
 
-    pub async fn product_recommend(&mut self, request: &Request) -> Result<result::Result, (i32, String)> {
+    pub fn product_recommend(&mut self, request: &Request) -> Result<result::Result, (i32, String)> {
 
         if request.product_id.is_none() {
             return Err((-60, "Product Id is not set".to_string()));
         }
+        println!("{:#?}", request);
          self.recommender.target_item_recs(&self.data, request.product_id.clone().unwrap() as u32,
                                           if request.limit.is_some(){ request.limit.clone().unwrap() as usize }
                                                 else { 100_usize }, 20, 10).map_or_else(
@@ -118,11 +120,11 @@ impl Processor{
              })
          )
     }
-    pub async fn user_recommend(&mut self, request: &Request) -> Result<result::Result, (i32, String)> {
+    pub fn user_recommend(&mut self, request: &Request) -> Result<result::Result, (i32, String)> {
         if request.user_id.is_none() {
             return Err((-60, "User Id is not set".to_string()));
         }
-        self.recommender.target_item_recs(&self.data, request.user_id.clone().unwrap() as u32,
+        self.recommender.target_user_recs(&self.data, request.user_id.clone().unwrap() as u32,
                                           if request.limit.is_some(){ request.limit.clone().unwrap() as usize }
                                           else { 100_usize }, 20, 10).map_or_else(
             |e| Err(e),
@@ -132,8 +134,13 @@ impl Processor{
             })
         )
     }
-}
 
+    pub fn test(&mut self) -> Result<(), (i32, String)>{
+        self.recommender.complex_train(&self.data);
+        Ok(())
+    }
+}
+/*
 pub fn convert_to_series(values: &[products::Product]) -> (Series, Series, Series){
     let mut item_id_builder = PrimitiveChunkedBuilder::<Int64Type>::new("item_id", values.len());
     let mut title_builder = Utf8ChunkedBuilder::new("title", values.len(), values.len()*5);
@@ -151,3 +158,4 @@ pub fn convert_to_series(values: &[products::Product]) -> (Series, Series, Serie
         description_builder.finish().into(),
     )
 }
+*/

@@ -1,3 +1,4 @@
+use polars::export::chrono::format::StrftimeItems;
 use sqlx::encode::IsNull::No;
 use tokio::count;
 use crate::processor::products;
@@ -98,5 +99,25 @@ impl Recommender {
         };
         let output = recommender.item_recs(&item_id.to_string(), count);
         Ok(output.iter().map(|i| (i.0.to_owned(), i.1)).collect())
+    }
+
+    pub fn complex_train(&mut self, data: &Vec<products::Product>) -> Result<(f32, f32, f32), (i32, String)> {
+        let mut dataset = discorec::Dataset::new();
+            data.iter().for_each(|p|{
+                dataset.push(p.user_id.to_owned().to_string(), p.item_id.to_owned().to_string(), p.rating.to_owned())
+        });
+        if self.core.is_none() {
+            
+            self.core = Some(discorec::Recommender::fit_explicit(&dataset));
+        }
+        let recommender = match self.core {
+            Some(ref r) => r,
+            None => return Err((-71, "Recommender core not found".to_string()))
+        };
+        Ok((
+            recommender.predict(&"43".to_string(), &"1843".to_string()),
+            recommender.rmse(&dataset),
+            recommender.global_mean()
+        ))
     }
 }
