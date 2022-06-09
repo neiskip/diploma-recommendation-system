@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::format;
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -35,23 +36,47 @@ impl CLI{
     pub fn run(&self, app: Arc<Mutex<App>>){
         match self.args.get(&'r').unwrap_or(&String::from("")).as_str() {
             "test" => {
-                app.lock().unwrap().handler.test().unwrap();
+                let (item_id, user_id) = {
+                    let parsed = self.args.get(&'i').unwrap_or(&String::from(""))
+                                        .split(',').filter_map(|x| x.parse::<u32>().ok()).collect::<Vec<u32>>();
+                    (
+                        parsed.get(0).expect("Option `i`: item ID is not set").to_owned(),
+                        parsed.get(1).expect("Option `i`: user ID is not set").to_owned()
+                    )
+                };
+                app.lock().unwrap().handler.test(item_id, user_id).unwrap();
             },
             "terminal" => {
                 let mut _app = app.lock().unwrap();
-                let result = match self.args.get(&'m').unwrap_or(&String::from("")).as_str() {
+                match self.args.get(&'m').unwrap_or(&String::from("")).as_str() {
                     "by_product" => _app.handler.product_recommend(&crate::processor::request::Request{
                         user_id: None,
                         product_id: match self.args.get(&'i').expect("Option `i` is not set").trim().parse(){
                             Ok(id) if id > 0 => Some(id),
                             Err(_) => panic!("Not numeric ID"),
-                            Ok(id) => panic!("Incorrect ID")
+                            Ok(_) => panic!("Incorrect ID")
                         },
                         method: "by_product".to_string(),
                         limit: None
                     }),
+                    "by_user" => _app.handler.user_recommend(&crate::processor::request::Request{
+                        user_id: match self.args.get(&'i').expect("Option `i` is not set").trim().parse(){
+                            Ok(id) if id > 0 => Some(id),
+                            Err(_) => panic!("Not numeric ID"),
+                            Ok(_) => panic!("Incorrect ID")
+                        },
+                        product_id: None,
+                        method: "by_user".to_string(),
+                        limit: None
+                    }),
                     _ => panic!("Method not found!")
-                };
+                }.and_then(|r|{
+                    println!("{}", serde_json::to_string(&r).unwrap_or(format!("{{ \"error\": {}, \"result\": null }}", "Unable to serialize result")));
+                    Ok(r)
+                }).map_err(|e|{
+                    println!("{{ \"error\": {}, \"result\": null }}", e.1);
+                    e
+                }).ok();
             },
             "server" => {
                 let listener: TcpListener = std::net::TcpListener::bind("127.0.0.1:8047").unwrap();

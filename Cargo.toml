@@ -22,3 +22,5 @@ smartcore = "0.2.1"
 fuzzy-matcher = "0.3.7"
 
 discorec = "0.1.1"
+
+ndarray = "0.15"

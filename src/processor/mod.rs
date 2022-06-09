@@ -31,14 +31,13 @@ pub struct Processor{
 impl Processor{
     pub async fn new(mut db: sqlx::MySqlConnection) -> Self{
         let data = Processor::get_data(&mut db).await.unwrap();
-        println!("{:#?}", data);
         Processor{ data: data, recommender: recommender::Recommender::new() }
     }
     pub async fn get_data(db: &mut sqlx::MySqlConnection) -> Result<Vec<products::Product>, (i32, String)> {
         let product_view = App::get_config().database.product_data_view.unwrap_or("products".to_string());
         let rating_view = App::get_config().database.rating_view.unwrap_or("user_ratings".to_string());
         let q_s =
-            format!("SELECT r.user_id, p.item_id, CAST(r.rating as FLOAT) as rating FROM ")
+            format!("SELECT DISTINCT r.user_id, p.item_id, CAST(r.rating as FLOAT) as rating FROM ")
                 + rating_view.as_str() + " as r JOIN " + product_view.as_str() + " p ON r.item_id = p.item_id";
         println!("{}", q_s);
         match sqlx::query_as(&q_s).fetch_all(db).await{
@@ -57,8 +56,6 @@ impl Processor{
                 |request_str|{
                     let start = request_str.find("{").unwrap_or(0 as usize);
                     let end = request_str.find("}").unwrap_or(0 as usize);
-                    println!("{}", request_str);
-                    println!("{}", &request_str[start..end+1]);
                     serde_json::from_str::<Request>(&request_str[start..end+1]).map_err(|e| (-3, e.to_string()))
             })
         }).and_then(|req|{
@@ -88,7 +85,6 @@ impl Processor{
             let response = serde_json::to_string(&result).unwrap_or(
                 format!("{{\"error\": \"{}\", \"result\": null }}", "Could not convert to JSON")
             );
-            println!("{}", response);
             let output = format!(response_fmt!(),"200 OK", response.len(), response);
             stream.write(output.as_bytes()).map_or_else(|e|{ Err((-5, e.to_string())) }, |_| Ok(result))
         }).map_err(|e|{
@@ -109,7 +105,6 @@ impl Processor{
         if request.product_id.is_none() {
             return Err((-60, "Product Id is not set".to_string()));
         }
-        println!("{:#?}", request);
          self.recommender.target_item_recs(&self.data, request.product_id.clone().unwrap() as u32,
                                           if request.limit.is_some(){ request.limit.clone().unwrap() as usize }
                                                 else { 100_usize }, 20, 10).map_or_else(
@@ -135,8 +130,9 @@ impl Processor{
         )
     }
 
-    pub fn test(&mut self) -> Result<(), (i32, String)>{
-        self.recommender.complex_train(&self.data);
+    pub fn test(&mut self, item_id: u32, user_id: u32) -> Result<(), (i32, String)>{
+        let test_result = self.recommender.complex_train(&self.data, item_id, user_id);
+        println!("{:?}", test_result.unwrap());
         Ok(())
     }
 }
