@@ -107,7 +107,7 @@ impl Processor{
         }
          self.recommender.target_item_recs(&self.data, request.product_id.clone().unwrap() as u32,
                                           if request.limit.is_some(){ request.limit.clone().unwrap() as usize }
-                                                else { 100_usize }, 20, 10).map_or_else(
+                                                else { self.data.len() as usize }, 20, 50).map_or_else(
              |e| Err(e),
              |r| Ok(result::Result{
                  result: Some(r),
@@ -121,7 +121,7 @@ impl Processor{
         }
         self.recommender.target_user_recs(&self.data, request.user_id.clone().unwrap() as u32,
                                           if request.limit.is_some(){ request.limit.clone().unwrap() as usize }
-                                          else { 100_usize }, 20, 10).map_or_else(
+                                          else { self.data.len() as usize }, 20, 50).map_or_else(
             |e| Err(e),
             |r| Ok(result::Result{
                 result: Some(r),

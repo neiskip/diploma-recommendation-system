@@ -57,7 +57,12 @@ impl CLI{
                             Ok(_) => panic!("Incorrect ID")
                         },
                         method: "by_product".to_string(),
-                        limit: None
+                        limit: match self.args.get(&'l'){
+                            Some(count) => {
+                                Some(count.parse::<u32>().unwrap())
+                            },
+                            _ => None
+                        }
                     }),
                     "by_user" => _app.handler.user_recommend(&crate::processor::request::Request{
                         user_id: match self.args.get(&'i').expect("Option `i` is not set").trim().parse(){
@@ -67,7 +72,12 @@ impl CLI{
                         },
                         product_id: None,
                         method: "by_user".to_string(),
-                        limit: None
+                        limit: match self.args.get(&'l'){
+                            Some(count) => {
+                                Some(count.parse::<u32>().unwrap())
+                            },
+                            _ => None
+                        }
                     }),
                     _ => panic!("Method not found!")
                 }.and_then(|r|{
