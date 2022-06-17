@@ -1,9 +1,7 @@
 use std::collections::HashMap;
-use std::fmt::format;
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use serde::de::Unexpected::Str;
 use crate::app::App;
 #[derive(Default, Debug)]
 pub struct CLI{
@@ -81,7 +79,7 @@ impl CLI{
                     }),
                     _ => panic!("Method not found!")
                 }.and_then(|r|{
-                    println!("{}", serde_json::to_string(&r).unwrap_or(format!("{{ \"error\": {}, \"result\": null }}", "Unable to serialize result")));
+                    println!("{}", serde_json::to_string(&r).unwrap_or(format!("{{ \"error\": \"{}\", \"result\": null }}", "Unable to serialize the result")));
                     Ok(r)
                 }).map_err(|e|{
                     println!("{{ \"error\": {}, \"result\": null }}", e.1);
