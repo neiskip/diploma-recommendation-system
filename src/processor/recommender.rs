@@ -101,13 +101,12 @@ impl Recommender {
         Ok(output.iter().map(|i| (i.0.to_owned(), i.1)).collect())
     }
 
-    pub fn complex_train(&mut self, data: &Vec<products::Product>, item_id: u32, user_id: u32) -> Result<(f32, f32, f32, ndarray::ArrayView1<f32>, ndarray::ArrayView1<f32> ), (i32, String)> {
+    pub fn complex_train(&mut self, data: &Vec<products::Product>, item_id: u32, user_id: u32) -> Result<(f32, f32, f32 ), (i32, String)> {
         let mut dataset = discorec::Dataset::new();
             data.iter().for_each(|p|{
                 dataset.push(p.user_id.to_owned().to_string(), p.item_id.to_owned().to_string(), p.rating.to_owned())
         });
         if self.core.is_none() {
-            
             self.core = Some(discorec::RecommenderBuilder::new().iterations(100).factors(20).fit_explicit(&dataset));
         }
         let recommender = match self.core {
@@ -117,9 +116,7 @@ impl Recommender {
         Ok((
             recommender.predict(&user_id.to_string(), &item_id.to_string()),
             recommender.rmse(&dataset),
-            recommender.global_mean(),
-            recommender.item_factors(&item_id.to_string()).unwrap(),
-            recommender.user_factors(&user_id.to_string()).unwrap()
+            recommender.global_mean()
         ))
     }
 }
