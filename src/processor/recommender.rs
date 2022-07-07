@@ -1,6 +1,4 @@
-use polars::export::chrono::format::StrftimeItems;
 use sqlx::encode::IsNull::No;
-use tokio::count;
 use crate::processor::products;
 
 pub struct Recommender {

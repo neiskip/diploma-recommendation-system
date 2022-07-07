@@ -1,6 +1,4 @@
-// use alloc::alloc;
 
-pub mod learning;
 pub mod request;
 pub mod result;
 pub mod products;
@@ -8,11 +6,6 @@ pub mod recommender;
 
 use std::io::{Read, Write};
 use std::net::TcpStream;
-
-use polars::prelude::{DataFrame, PrimitiveChunkedBuilder, Utf8ChunkedBuilder, Int32Type, ChunkedBuilder, Series, Float64Type, Int64Type};
-use polars::prelude::{Result as PolarResult};
-use smartcore::linalg::naive::dense_matrix::DenseMatrix;
-use smartcore::linear::linear_regression::LinearRegression;
 
 use crate::app::App;
 use crate::processor::request::Request;
@@ -105,6 +98,8 @@ impl Processor{
         if request.product_id.is_none() {
             return Err((-60, "Product Id is not set".to_string()));
         }
+        println!("Product ID: {}\n, Limit: {}\n, Factors: 20\n, Iterations: 50",
+                 request.product_id.clone().unwrap(), request.limit.clone().unwrap_or(0));
          self.recommender.target_item_recs(&self.data, request.product_id.clone().unwrap() as u32,
                                           if request.limit.is_some(){ request.limit.clone().unwrap() as usize }
                                                 else { self.data.len() as usize }, 20, 50).map_or_else(
@@ -119,6 +114,8 @@ impl Processor{
         if request.user_id.is_none() {
             return Err((-60, "User Id is not set".to_string()));
         }
+        println!("User ID: {}\n, Limit: {}\n, Factors: 20\n, Iterations: 50",
+                 request.user_id.clone().unwrap(), request.limit.clone().unwrap_or(0));
         self.recommender.target_user_recs(&self.data, request.user_id.clone().unwrap() as u32,
                                           if request.limit.is_some(){ request.limit.clone().unwrap() as usize }
                                           else { self.data.len() as usize }, 20, 50).map_or_else(
@@ -131,8 +128,8 @@ impl Processor{
     }
 
     pub fn test(&mut self, item_id: u32, user_id: u32) -> Result<(), (i32, String)>{
-        let test_result = self.recommender.complex_train(&self.data, item_id, user_id);
-        println!("{:?}", test_result.unwrap());
+        let test_result = self.recommender.complex_train(&self.data, item_id, user_id).unwrap();
+        println!("Prediction result: {}\nRMSE: {}\nGlobal Mean Rating: {}", test_result.0, test_result.1, test_result.2);
         Ok(())
     }
 }

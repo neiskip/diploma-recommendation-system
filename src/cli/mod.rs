@@ -92,7 +92,7 @@ impl CLI{
                 for stream in listener.incoming(){
                     let _app = Arc::clone(&app);
                     thread::spawn(move ||{
-                        futures::executor::block_on(_app.lock().unwrap().handler.run(stream.unwrap())).unwrap();
+                        futures::executor::block_on(_app.lock().unwrap().handler.run(stream.unwrap()));
                     });
                 }
             },
